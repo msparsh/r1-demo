@@ -210,6 +210,7 @@ export function createRolloutGroup(
   const columns = Math.min(8, groupSize);
   const rowSpacing = groupSize > 6 ? 46 : 42;
   const rows = Math.ceil(groupSize / columns);
+  const greedyBirdCount = Math.floor(groupSize / 4);
   return {
     frame: 0,
     gap: trainingGap,
@@ -244,6 +245,7 @@ export function createRolloutGroup(
         steps: [],
         reward: 0,
         done: false,
+        isGreedy: index % 4 === 0 && index < greedyBirdCount * 4,
         passedPipes: new Set(),
       };
     }),
@@ -267,15 +269,17 @@ export function stepRolloutGroup(group, policy, trainingBest = 0, difficultMode 
     const flapIndex = noFlapIndex + 1;
     const noFlapValue =
       policy.qValues[noFlapIndex] +
-      explorationBonus / Math.sqrt(policy.visits[noFlapIndex] + 1);
+      (episode.isGreedy ? 0 : explorationBonus / Math.sqrt(policy.visits[noFlapIndex] + 1));
     const flapValue =
       policy.qValues[flapIndex] +
-      explorationBonus / Math.sqrt(policy.visits[flapIndex] + 1);
+      (episode.isGreedy ? 0 : explorationBonus / Math.sqrt(policy.visits[flapIndex] + 1));
     const greedyAction =
       flapValue === noFlapValue
-        ? episode.random() < 0.5
-          ? 1
-          : 0
+        ? episode.isGreedy
+          ? 0
+          : episode.random() < 0.5
+            ? 1
+            : 0
         : flapValue > noFlapValue
           ? 1
           : 0;
@@ -283,9 +287,11 @@ export function stepRolloutGroup(group, policy, trainingBest = 0, difficultMode 
       episode.steps.length / EXPLORATION_DECAY_STEPS,
       1,
     );
-    const explorationRate = INITIAL_EXPLORATION_RATE * (1 - explorationProgress);
+    const explorationRate = episode.isGreedy
+      ? 0
+      : INITIAL_EXPLORATION_RATE * (1 - explorationProgress);
     const action =
-      episode.random() < explorationRate
+      !episode.isGreedy && episode.random() < explorationRate
         ? 1 - greedyAction
         : greedyAction;
     policy.visits[action === 1 ? flapIndex : noFlapIndex] += 1;

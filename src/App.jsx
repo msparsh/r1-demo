@@ -113,6 +113,26 @@ function drawBird(context, bird, time, bodyColor = "#ffca62") {
   context.restore();
 }
 
+function drawGreedyCrown(context, bird) {
+  const x = bird.x - 10;
+  const y = bird.y - 27;
+  context.fillStyle = "#f2bc4c";
+  context.strokeStyle = "#8a6c2f";
+  context.lineWidth = 1;
+  context.beginPath();
+  context.moveTo(x, y + 9);
+  context.lineTo(x + 2, y);
+  context.lineTo(x + 7, y + 5);
+  context.lineTo(x + 10, y - 2);
+  context.lineTo(x + 14, y + 5);
+  context.lineTo(x + 18, y);
+  context.lineTo(x + 20, y + 9);
+  context.closePath();
+  context.fill();
+  context.stroke();
+  context.fillRect(x, y + 9, 20, 3);
+}
+
 function drawPipe(context, pipe) {
   const pipeWidth = 78;
   const cap = 11;
@@ -282,7 +302,13 @@ function drawSharedGroupScene(context, group, time, best) {
   for (const [index, episode] of group.episodes.entries()) {
     if (episode.done) continue;
     context.save();
-    drawBird(context, episode.game.bird, time + index * 83, colors[index % colors.length]);
+    drawBird(
+      context,
+      episode.game.bird,
+      time + index * 83,
+      episode.isGreedy ? "#718ac4" : colors[index % colors.length],
+    );
+    if (episode.isGreedy) drawGreedyCrown(context, episode.game.bird);
     context.restore();
   }
 }
@@ -303,7 +329,7 @@ export default function App() {
   const [trainingSpeed, setTrainingSpeed] = useState(1);
   const [difficultMode, setDifficultMode] = useState(false);
   const [groupSize, setGroupSize] = useState(24);
-  const [learningRate, setLearningRate] = useState(0.03);
+  const [learningRate, setLearningRate] = useState(0.05);
   const trainingConfig = useRef({ groupSize, learningRate, speed: trainingSpeed });
   trainingConfig.current = { groupSize, learningRate, speed: trainingSpeed };
   const [stats, setStats] = useState({
@@ -646,7 +672,7 @@ export default function App() {
           <section className="learning-card">
             <div className="card-overline">UNDER THE HOOD <span>01 — 03</span></div>
             <h2>Learning<br />by comparison.</h2>
-            <p>Every bird greedily picks the action with the highest Q value plus a visit bonus. The bonus grows when a bird reaches 75% of the training high score, encouraging less-tried actions. Every flight updates the shared table.</p>
+            <p>One quarter are strict greedy followers that always choose the highest Q-value action. The rest add a visit bonus and explore independently early in each flight. Every flight updates the shared table.</p>
             <div className="vision-panel" aria-label="Live bird observations">
               <div className="vision-heading"><span>WHAT AN ACTIVE BIRD SEES</span><span>5 INPUTS</span></div>
               <div className="vision-grid">
@@ -684,7 +710,7 @@ export default function App() {
             <div className="slider-label beta-label"><span>Q update rate <i>α</i></span><strong>{learningRate.toFixed(3)}</strong></div>
             <input className="range-input beta-range" aria-label="Q-learning rate" type="range" min="0.005" max="0.15" step="0.005" value={learningRate} onChange={(event) => setLearningRate(Number(event.target.value))} />
             <div className="range-scale"><span>steady</span><span>faster updates</span></div>
-            <div className="exploration-hint">Birds mostly choose using Q values plus an uncertainty bonus for less-tried actions, with independent action randomness that fades to zero during each flight. The bonus doubles after 75% of the training high score. Randomized starting positions separate their paths. Gaps narrow to normal over nine groups. Normal training is 1×; use Train 10× to speed it up.</div>
+            <div className="exploration-hint">Crowned birds are strict greedy followers. The rest use Q values plus a visit bonus and independent early-flight exploration. The bonus doubles after 75% of the training high score. Randomized starting positions separate their paths. Gaps narrow to normal over nine groups. Normal training is 1×; use Train 10× to speed it up.</div>
             <div className="mini-equation"><span>Q-LEARNING UPDATE</span><code>Q(s,a) ← Q(s,a) + α[r + γ maxₐ′Q(s′,a′) − Q(s,a)]</code></div>
           </section>
 
