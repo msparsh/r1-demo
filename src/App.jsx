@@ -373,7 +373,7 @@ export default function App() {
     if (current.mode === "training") return;
     current.mode = "manual";
     if (current.game.status === "dead") {
-      current.game = createGame(Date.now());
+      current.game = createGame(1);
     }
     if (current.game.status === "ready") current.game.status = "playing";
     current.game.bird.vy = -7.3;
@@ -507,7 +507,7 @@ export default function App() {
     return () => {
       current.mode = "idle";
       current.group = null;
-      current.game = createGame(Date.now());
+      current.game = createGame(1);
     };
   }, [training, groupSize]);
 
@@ -545,7 +545,7 @@ export default function App() {
   const startManual = () => {
     setTraining(false);
     runtime.current.mode = "manual";
-    runtime.current.game = createGame(Date.now());
+    runtime.current.game = createGame(1);
     runtime.current.game.status = "playing";
     runtime.current.game.bird.vy = -7.3;
   };
@@ -561,7 +561,7 @@ export default function App() {
     current.round = 0;
     current.trainingBest = 0;
     current.rewardHistory = [];
-    current.game = createGame(Date.now());
+    current.game = createGame(1);
     localStorage.removeItem(TRAINING_STORAGE_KEY);
     localStorage.removeItem("bird-training-v15");
     localStorage.removeItem("bird-training-v14");
@@ -710,7 +710,7 @@ export default function App() {
             <div className="slider-label beta-label"><span>Q update rate <i>α</i></span><strong>{learningRate.toFixed(3)}</strong></div>
             <input className="range-input beta-range" aria-label="Q-learning rate" type="range" min="0.005" max="0.15" step="0.005" value={learningRate} onChange={(event) => setLearningRate(Number(event.target.value))} />
             <div className="range-scale"><span>steady</span><span>faster updates</span></div>
-            <div className="exploration-hint">Crowned birds are strict greedy followers. The rest use Q values plus a visit bonus and independent early-flight exploration. The bonus doubles after 75% of the training high score. Randomized starting positions separate their paths. Gaps narrow to normal over nine groups. Normal training is 1×; use Train 10× to speed it up.</div>
+            <div className="exploration-hint">Crowned birds are strict greedy followers. The rest use Q values plus a visit bonus and independent early-flight exploration. The bonus doubles after 75% of the training high score. Staggered starting positions separate their paths without introducing random start states. Gaps narrow to normal over nine groups. Normal training is 1×; use Train 10× to speed it up.</div>
             <div className="mini-equation"><span>Q-LEARNING UPDATE</span><code>Q(s,a) ← Q(s,a) + α[r + γ maxₐ′Q(s′,a′) − Q(s,a)]</code></div>
           </section>
 

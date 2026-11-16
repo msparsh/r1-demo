@@ -103,7 +103,7 @@ export function policyAction(policy, observation) {
   return flapValue > noFlapValue ? 1 : 0;
 }
 
-export function createGame(seed = Date.now()) {
+export function createGame(seed = 1) {
   const random = randomGenerator(seed);
   const firstGap = 168 + random() * 180;
   return {
@@ -223,20 +223,15 @@ export function createRolloutGroup(
     episodes: Array.from({ length: groupSize }, (_, index) => {
       const seed = round * 7919 + index * 1013 + 17;
       const random = randomGenerator(seed);
-      const variation = randomGenerator(seed ^ 0x9e3779b9);
       const column = index % columns;
       const row = Math.floor(index / columns);
+      const xOffset = (column - (columns - 1) / 2) * 42 + ((index % 3) - 1) * 3;
+      const yOffset = (row - (rows - 1) / 2) * rowSpacing + ((index % 4) - 1.5) * 2;
       const bird = {
         ...world.bird,
-        x:
-          world.bird.x +
-          (column - (columns - 1) / 2) * 42 +
-          (variation() - 0.5) * 14,
-        y:
-          world.bird.y +
-          (row - (rows - 1) / 2) * rowSpacing +
-          (variation() - 0.5) * 14,
-        vy: (variation() - 0.5) * 1,
+        x: world.bird.x + xOffset,
+        y: world.bird.y + yOffset,
+        vy: ((index % 5) - 2) * 0.15,
       };
       const game = {
         status: "playing",

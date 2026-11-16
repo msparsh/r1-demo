@@ -21,9 +21,9 @@ switch to fresh layouts. A tabular Q learner maps the bird's gap-relative height
 vertical speed, pipe distance, and gap width to flap/no-flap action values.
 Every bird greedily chooses the action with the highest Q value plus a visit
 bonus for less-tried actions; the bonus increases after reaching 75% of the
-training high score. Randomized, staggered starting positions keep flight
-paths from stacking exactly on top of each other while sampling more of the
-game space. Birds start in a grid at different heights and pipe distances.
+training high score. Staggered starting positions keep flight paths from
+stacking exactly on top of each other without adding random start-state noise.
+Birds start in a grid at different heights and pipe distances.
 Every trajectory updates the shared Q table with bootstrapped state-action
 values, so all birds contribute to learning. Survival and gap-alignment
 rewards provide feedback before the first pipe is passed.
