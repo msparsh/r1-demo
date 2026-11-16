@@ -285,17 +285,6 @@ function drawSharedGroupScene(context, group, time, best) {
     drawBird(context, episode.game.bird, time + index * 83, colors[index % colors.length]);
     context.restore();
   }
-  context.textAlign = "left";
-  context.fillStyle = "rgba(255,255,255,.9)";
-  roundedRect(context, 14, 15, 160, 25, 13);
-  context.fill();
-  context.fillStyle = "#477a55";
-  context.beginPath();
-  context.arc(27, 27.5, 3, 0, Math.PI * 2);
-  context.fill();
-  context.fillStyle = "#42694f";
-  context.font = "600 10px 'Trebuchet MS', sans-serif";
-  context.fillText(`${group.episodes.length} SHARED POLICY · ADAPTIVE`, 36, 31);
 }
 
 function Stat({ label, value, suffix }) {
@@ -312,6 +301,7 @@ export default function App() {
   const runtime = useRef(null);
   const [training, setTraining] = useState(false);
   const [trainingSpeed, setTrainingSpeed] = useState(1);
+  const [difficultMode, setDifficultMode] = useState(false);
   const [groupSize, setGroupSize] = useState(24);
   const [learningRate, setLearningRate] = useState(0.03);
   const trainingConfig = useRef({ groupSize, learningRate, speed: trainingSpeed });
@@ -334,6 +324,7 @@ export default function App() {
     runtime.current = {
       policy,
       game: createGame(1),
+      difficultMode: false,
       mode: "idle",
       lastAction: 0,
       frame: 0,
@@ -385,7 +376,7 @@ export default function App() {
             action = policyAction(current.policy, getObservation(current.game));
           }
           current.game.flap = false;
-          stepGame(current.game, action);
+          stepGame(current.game, action, current.difficultMode);
           if (current.game.status === "dead" && current.mode === "idle") {
             current.mode = "idle";
           }
@@ -395,6 +386,7 @@ export default function App() {
               current.group,
               current.policy,
               current.trainingBest,
+              current.difficultMode,
             );
             const groupBestScore = Math.max(...current.group.episodes.map((episode) => episode.game.score));
             if (groupBestScore > current.trainingBest) {
@@ -518,6 +510,12 @@ export default function App() {
     setTraining(true);
   };
 
+  const toggleDifficultMode = () => {
+    const enabled = !runtime.current.difficultMode;
+    runtime.current.difficultMode = enabled;
+    setDifficultMode(enabled);
+  };
+
   const startManual = () => {
     setTraining(false);
     runtime.current.mode = "manual";
@@ -622,6 +620,14 @@ export default function App() {
                 <span>{training ? "Ⅱ" : "✳"}</span>{training ? "Pause training" : "Train the agent"}
               </button>
               <button
+                className={`button button-secondary${difficultMode ? " is-difficult" : ""}`}
+                onClick={toggleDifficultMode}
+                aria-pressed={difficultMode}
+                title="Move pipe gaps up and down"
+              >
+                Difficult mode
+              </button>
+              <button
                 className={`button button-secondary${training && trainingSpeed === 10 ? " is-fast-training" : ""}`}
                 onClick={startFastTraining}
                 aria-pressed={training && trainingSpeed === 10}
@@ -673,12 +679,12 @@ export default function App() {
             <label className="slider-label" htmlFor="group-size">
               <span>Flights per group <i>G</i></span><strong>{groupSize}</strong>
             </label>
-            <input id="group-size" className="range-input" type="range" min="4" max="24" step="4" value={groupSize} onChange={(event) => setGroupSize(Number(event.target.value))} />
-            <div className="range-scale"><span>4</span><span>24 parallel birds</span></div>
+            <input id="group-size" className="range-input" type="range" min="4" max="50" step="2" value={groupSize} onChange={(event) => setGroupSize(Number(event.target.value))} />
+            <div className="range-scale"><span>4</span><span>50 parallel birds</span></div>
             <div className="slider-label beta-label"><span>Q update rate <i>α</i></span><strong>{learningRate.toFixed(3)}</strong></div>
             <input className="range-input beta-range" aria-label="Q-learning rate" type="range" min="0.005" max="0.15" step="0.005" value={learningRate} onChange={(event) => setLearningRate(Number(event.target.value))} />
             <div className="range-scale"><span>steady</span><span>faster updates</span></div>
-            <div className="exploration-hint">All birds choose greedily using Q values plus an uncertainty bonus for less-tried actions. The bonus doubles after 75% of the training high score. Randomized starting positions separate their paths. Gaps narrow to normal over nine groups. Normal training is 1×; use Train 10× to speed it up.</div>
+            <div className="exploration-hint">Birds mostly choose using Q values plus an uncertainty bonus for less-tried actions, with independent action randomness that fades to zero during each flight. The bonus doubles after 75% of the training high score. Randomized starting positions separate their paths. Gaps narrow to normal over nine groups. Normal training is 1×; use Train 10× to speed it up.</div>
             <div className="mini-equation"><span>Q-LEARNING UPDATE</span><code>Q(s,a) ← Q(s,a) + α[r + γ maxₐ′Q(s′,a′) − Q(s,a)]</code></div>
           </section>
 

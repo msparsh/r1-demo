@@ -83,6 +83,7 @@ kbd { padding: 3px 5px; border: 1px solid #e0e5dc; border-radius: 4px; backgroun
 .button-secondary { border-color: #e3e8df; background: #fff; color: #54705b; }
 .button-secondary:hover, .icon-button:hover { border-color: #cbd9c9; background: #f9fcf6; }
 .button-secondary.is-fast-training { border-color: #d6e5c7; background: #f2f8eb; color: #3e7954; }
+.button-secondary.is-difficult { border-color: #efd4c5; background: #fff3ec; color: #a45e40; }
 .button-secondary > :first-child { color: #79a27a; }
 .icon-button { display: grid; width: 39px; place-items: center; border-color: #e3e8df; background: #fff; color: #708474; font-size: 18px; }
 .keyboard-hint { display: flex; gap: 10px; padding: 13px 0 0; border-top: 1px solid var(--line); color: #a0aaa0; font: 8px var(--mono); letter-spacing: .08em; }

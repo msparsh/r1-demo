@@ -7,12 +7,18 @@ const BIRD_RADIUS_X = 18;
 const BIRD_RADIUS_Y = 11;
 const PIPE_WIDTH = 78;
 const PIPE_GAP = 154;
+const MIN_PIPE_SPACING = 220;
+const MAX_PIPE_SPACING = 340;
+const DIFFICULT_GAP_AMPLITUDE = 46;
+const DIFFICULT_GAP_SPEED = 0.05;
 const GRAVITY = 0.39;
 const FLAP_VELOCITY = -7.3;
 const TERMINAL_VELOCITY = 8.5;
 const EXPLORATION_SCORE_FRACTION = 0.75;
 const BASE_EXPLORATION_BONUS = 8;
 const HIGH_SCORE_EXPLORATION_BONUS = 16;
+const INITIAL_EXPLORATION_RATE = 0.04;
+const EXPLORATION_DECAY_STEPS = 60;
 const HEIGHT_BUCKETS = 9;
 const VELOCITY_BUCKETS = 7;
 const DISTANCE_BUCKETS = 4;
@@ -34,6 +40,25 @@ function randomGenerator(seed) {
 
 function clamp(value, minimum, maximum) {
   return Math.max(minimum, Math.min(maximum, value));
+}
+
+function getNextPipeX(lastPipe, random) {
+  return lastPipe.x + MIN_PIPE_SPACING + random() * (MAX_PIPE_SPACING - MIN_PIPE_SPACING);
+}
+
+function updatePipeGaps(pipes, frame, difficultMode) {
+  for (const pipe of pipes) {
+    const baseGapY = pipe.baseGapY ?? pipe.gapY;
+    pipe.gapY = difficultMode
+      ? clamp(
+          baseGapY +
+            Math.sin(frame * DIFFICULT_GAP_SPEED + (pipe.motionPhase ?? 0)) *
+              DIFFICULT_GAP_AMPLITUDE,
+          pipe.gap / 2 + 20,
+          GROUND_Y - pipe.gap / 2 - 30,
+        )
+      : baseGapY;
+  }
 }
 
 function observationIndex(observation) {
@@ -80,7 +105,16 @@ export function createGame(seed = Date.now()) {
     status: "ready",
     score: 0,
     bird: { x: BIRD_X, y: 270, vy: 0 },
-    pipes: [{ x: WIDTH + 40, gapY: firstGap, gap: PIPE_GAP, scored: false }],
+    pipes: [
+      {
+        x: WIDTH + 40,
+        gapY: firstGap,
+        baseGapY: firstGap,
+        motionPhase: random() * Math.PI * 2,
+        gap: PIPE_GAP,
+        scored: false,
+      },
+    ],
     randomState: seed >>> 0,
     random,
     flap: false,
@@ -103,7 +137,7 @@ export function getObservation(game) {
   ];
 }
 
-export function stepGame(game, action) {
+export function stepGame(game, action, difficultMode = false) {
   if (game.status !== "playing") return 0;
 
   const bird = game.bird;
@@ -120,13 +154,17 @@ export function stepGame(game, action) {
   for (const pipe of game.pipes) pipe.x -= 2.8;
   const lastPipe = game.pipes[game.pipes.length - 1];
   if (lastPipe.x < WIDTH - 240) {
+    const gapY = 165 + game.random() * 188;
     game.pipes.push({
-      x: WIDTH + 26,
-      gapY: 165 + game.random() * 188,
+      x: getNextPipeX(lastPipe, game.random),
+      gapY,
+      baseGapY: gapY,
+      motionPhase: game.random() * Math.PI * 2,
       gap: PIPE_GAP,
       scored: false,
     });
   }
+  updatePipeGaps(game.pipes, game.frames, difficultMode);
   game.pipes = game.pipes.filter((pipe) => pipe.x + PIPE_WIDTH > -12);
 
   if (bird.y < BIRD_RADIUS_Y) {
@@ -169,7 +207,8 @@ export function createRolloutGroup(
   world.pipes[0].gap = trainingGap;
   world.pipes[0].id = 0;
   world.nextPipeId = 1;
-  const columns = Math.min(6, groupSize);
+  const columns = Math.min(8, groupSize);
+  const rowSpacing = groupSize > 6 ? 46 : 42;
   const rows = Math.ceil(groupSize / columns);
   return {
     frame: 0,
@@ -189,7 +228,7 @@ export function createRolloutGroup(
           (variation() - 0.5) * 14,
         y:
           world.bird.y +
-          (row - (rows - 1) / 2) * 42 +
+          (row - (rows - 1) / 2) * rowSpacing +
           (variation() - 0.5) * 14,
         vy: (variation() - 0.5) * 1,
       };
@@ -211,7 +250,7 @@ export function createRolloutGroup(
   };
 }
 
-export function stepRolloutGroup(group, policy, trainingBest = 0) {
+export function stepRolloutGroup(group, policy, trainingBest = 0, difficultMode = false) {
   const active = group.episodes.filter((episode) => !episode.done);
   const explorationThreshold = Math.max(1, Math.ceil(trainingBest * EXPLORATION_SCORE_FRACTION));
   for (const episode of active) {
@@ -232,7 +271,7 @@ export function stepRolloutGroup(group, policy, trainingBest = 0) {
     const flapValue =
       policy.qValues[flapIndex] +
       explorationBonus / Math.sqrt(policy.visits[flapIndex] + 1);
-    const action =
+    const greedyAction =
       flapValue === noFlapValue
         ? episode.random() < 0.5
           ? 1
@@ -240,6 +279,15 @@ export function stepRolloutGroup(group, policy, trainingBest = 0) {
         : flapValue > noFlapValue
           ? 1
           : 0;
+    const explorationProgress = Math.min(
+      episode.steps.length / EXPLORATION_DECAY_STEPS,
+      1,
+    );
+    const explorationRate = INITIAL_EXPLORATION_RATE * (1 - explorationProgress);
+    const action =
+      episode.random() < explorationRate
+        ? 1 - greedyAction
+        : greedyAction;
     policy.visits[action === 1 ? flapIndex : noFlapIndex] += 1;
     const bird = episode.game.bird;
     let reward = 1;
@@ -266,14 +314,18 @@ export function stepRolloutGroup(group, policy, trainingBest = 0) {
   for (const pipe of world.pipes) pipe.x -= 2.8;
   const lastPipe = world.pipes[world.pipes.length - 1];
   if (lastPipe.x < WIDTH - 240) {
+    const gapY = 165 + world.random() * 188;
     world.pipes.push({
       id: world.nextPipeId++,
-      x: WIDTH + 26,
-      gapY: 165 + world.random() * 188,
+      x: getNextPipeX(lastPipe, world.random),
+      gapY,
+      baseGapY: gapY,
+      motionPhase: world.random() * Math.PI * 2,
       gap: group.gap,
       scored: false,
     });
   }
+  updatePipeGaps(world.pipes, group.frame + 1, difficultMode);
   world.pipes = world.pipes.filter((pipe) => pipe.x + PIPE_WIDTH > -12);
   for (const episode of group.episodes) episode.game.pipes = world.pipes;
 
