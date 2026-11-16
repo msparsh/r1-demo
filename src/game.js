@@ -19,6 +19,8 @@ const BASE_EXPLORATION_BONUS = 8;
 const HIGH_SCORE_EXPLORATION_BONUS = 16;
 const INITIAL_EXPLORATION_RATE = 0.04;
 const EXPLORATION_DECAY_STEPS = 60;
+const REPLAY_BUFFER_CAPACITY = 12000;
+const REPLAY_BATCH_SIZE = 1024;
 const HEIGHT_BUCKETS = 9;
 const VELOCITY_BUCKETS = 7;
 const DISTANCE_BUCKETS = 4;
@@ -87,6 +89,9 @@ export function createPolicy() {
   return {
     qValues: Array(Q_VALUE_COUNT).fill(0),
     visits: Array(Q_VALUE_COUNT).fill(0),
+    replayBuffer: [],
+    replayCursor: 0,
+    replaySeen: 0,
   };
 }
 
@@ -364,33 +369,103 @@ export function stepRolloutGroup(group, policy, trainingBest = 0, difficultMode 
   return group.episodes.every((episode) => episode.done);
 }
 
+function isValidReplayTransition(transition) {
+  return (
+    Array.isArray(transition) &&
+    transition.length === 4 &&
+    Number.isInteger(transition[0]) &&
+    transition[0] >= 0 &&
+    transition[0] < Q_STATE_COUNT &&
+    (transition[1] === 0 || transition[1] === 1) &&
+    Number.isFinite(transition[2]) &&
+    Number.isInteger(transition[3]) &&
+    transition[3] >= -1 &&
+    transition[3] < Q_STATE_COUNT
+  );
+}
+
+function addTransitionUpdate(updates, policy, transition) {
+  const [stateIndex, action, reward, nextStateIndex] = transition;
+  const key = stateIndex * Q_ACTION_COUNT + action;
+  const nextValue =
+    nextStateIndex >= 0
+      ? Math.max(
+          policy.qValues[nextStateIndex * Q_ACTION_COUNT],
+          policy.qValues[nextStateIndex * Q_ACTION_COUNT + 1],
+        )
+      : 0;
+  const target = reward + (nextStateIndex >= 0 ? 0.97 * nextValue : 0);
+  const update = updates.get(key) ?? { total: 0, count: 0 };
+  update.total += target;
+  update.count += 1;
+  updates.set(key, update);
+}
+
 function updateActionValues(policy, episodes, learningRate) {
   const rewards = episodes.map((episode) => episode.reward);
   const mean = rewards.reduce((sum, reward) => sum + reward, 0) / rewards.length;
   const variance = rewards.reduce((sum, reward) => sum + (reward - mean) ** 2, 0) / rewards.length;
   const spread = Math.sqrt(variance);
   const updates = new Map();
+  const currentTransitions = [];
   for (const episode of episodes) {
     for (let index = 0; index < episode.steps.length; index += 1) {
       const step = episode.steps[index];
-      const key = step.stateIndex * Q_ACTION_COUNT + step.action;
       const nextStep = episode.steps[index + 1];
-      const nextValue = nextStep
-        ? Math.max(
-            policy.qValues[nextStep.stateIndex * Q_ACTION_COUNT],
-            policy.qValues[nextStep.stateIndex * Q_ACTION_COUNT + 1],
-          )
-        : 0;
-      const target = step.reward + (nextStep ? 0.97 * nextValue : 0);
-      const update = updates.get(key) ?? { total: 0, count: 0 };
-      update.total += target;
-      update.count += 1;
-      updates.set(key, update);
+      const transition = [
+        step.stateIndex,
+        step.action,
+        step.reward,
+        nextStep ? nextStep.stateIndex : -1,
+      ];
+      currentTransitions.push(transition);
+      addTransitionUpdate(updates, policy, transition);
     }
   }
+
+  const replayBuffer = Array.isArray(policy.replayBuffer)
+    ? policy.replayBuffer.filter(isValidReplayTransition)
+    : [];
+  const replayCount = Math.min(REPLAY_BATCH_SIZE, replayBuffer.length);
+  const replayStart =
+    replayBuffer.length > 0 && Number.isInteger(policy.replayCursor)
+      ? policy.replayCursor % replayBuffer.length
+      : 0;
+  for (let index = 0; index < replayCount; index += 1) {
+    addTransitionUpdate(
+      updates,
+      policy,
+      replayBuffer[(replayStart + index) % replayBuffer.length],
+    );
+  }
+
   for (const [index, update] of updates) {
     const target = update.total / update.count;
-    policy.qValues[index] += learningRate * (target - policy.qValues[index]);
+    const visitAdjustedRate =
+      learningRate / Math.sqrt(1 + policy.visits[index] / 100);
+    policy.qValues[index] += visitAdjustedRate * (target - policy.qValues[index]);
+  }
+  policy.replayBuffer = replayBuffer;
+  policy.replayCursor =
+    replayBuffer.length > 0 ? (replayStart + replayCount) % replayBuffer.length : 0;
+  let replaySeen =
+    Number.isInteger(policy.replaySeen) && policy.replaySeen >= replayBuffer.length
+      ? policy.replaySeen
+      : replayBuffer.length;
+  for (const transition of currentTransitions) {
+    replaySeen += 1;
+    if (replayBuffer.length < REPLAY_BUFFER_CAPACITY) {
+      replayBuffer.push(transition);
+    } else {
+      const replacementIndex = Math.floor(Math.random() * replaySeen);
+      if (replacementIndex < REPLAY_BUFFER_CAPACITY) {
+        replayBuffer[replacementIndex] = transition;
+      }
+    }
+  }
+  policy.replaySeen = replaySeen;
+  if (policy.replayBuffer.length > 0) {
+    policy.replayCursor %= policy.replayBuffer.length;
   }
   return { mean, spread, flat: false };
 }

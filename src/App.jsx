@@ -672,7 +672,7 @@ export default function App() {
           <section className="learning-card">
             <div className="card-overline">UNDER THE HOOD <span>01 — 03</span></div>
             <h2>Learning<br />by comparison.</h2>
-            <p>One quarter are strict greedy followers that always choose the highest Q-value action. The rest add a visit bonus and explore independently early in each flight. Every flight updates the shared table.</p>
+            <p>One quarter are strict greedy followers that always choose the highest Q-value action. The rest add a visit bonus and explore independently early in each flight. Replay memory revisits earlier outcomes to help prevent forgetting.</p>
             <div className="vision-panel" aria-label="Live bird observations">
               <div className="vision-heading"><span>WHAT AN ACTIVE BIRD SEES</span><span>5 INPUTS</span></div>
               <div className="vision-grid">
